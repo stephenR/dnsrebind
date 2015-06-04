@@ -5,6 +5,8 @@ Simple hacky dns rebinding server based on dnslib and cherrypy
 ```shell
 ./dnsrebind.py -d DOMAIN -i IP
 cd www
+#modify pwn.html to your needs
+vim pwn.html
 python -m SimpleHTTPServer 80
 ```
 
