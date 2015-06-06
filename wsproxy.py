@@ -100,7 +100,7 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             name, value = map(lambda s: s.strip(), header.split(':', 1))
             self.send_header(name, value)
         self.end_headers()
-        self.wfile.write(reply["data"])
+        self.wfile.write(reply["data"].encode('utf-8'))
     def _write_html(self, html):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
