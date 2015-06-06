@@ -6,75 +6,160 @@ from ws4py.websocket import WebSocket
 from time import sleep
 import BaseHTTPServer
 import argparse
+from urllib import quote_plus
+import json
+from urlparse import urlparse, parse_qs
+import Cookie
 
-socket = None
+channels = {}
 reply = None
 
 PROXY_JS = """\
 var connection = new WebSocket('ws://{}/ws');
+
+connection.onopen = function () {{
+  connection.send('{{ "type": "register", "id": "{}" }}');
+}};
 
 connection.onerror = function (error) {{
   console.log('WebSocket Error ' + error);
 }};
 
 connection.onmessage = function (e) {{
-  var query = e.data;
+  var request = JSON.parse(e.data);
+  var method = request.method;
+  var query = request.query;
+  var data = request.data;
+  var headers = request.headers;
+
   console.log(query);
   var xhr = new XMLHttpRequest();
   xhr.onreadystatechange = function() {{
     if (xhr.readyState == 4) {{
-        connection.send(xhr.responseText);
+        var msg = {{"type": "reply", "request": e.data, "reply": {{ "status": xhr.status, "data": xhr.responseText, "headers": xhr.getAllResponseHeaders() }} }};
+        connection.send(JSON.stringify(msg));
     }}
   }}
-  xhr.open("GET",query,false);
-  xhr.send();
+  xhr.open(method, query, false);
+  for (header in headers) {{
+      xhr.setRequestHeader(header.name, header.value);
+  }}
+  xhr.send(data);
 }};
 """
 
 class Root(object):
     @cherrypy.expose
-    def runproxy(self):
-        return '<script src="/proxy.js"></script>'
+    def runproxy(self, id="default"):
+        return '<script src="/proxy.js?id={}"></script>'.format(quote_plus(id))
 
     @cherrypy.expose
-    def proxy_js(self):
+    def proxy_js(self, id="default"):
         cherrypy.response.headers['Content-Type'] = 'text/javascript'
         host = cherrypy.request.headers['Host']
-        print host
-        return PROXY_JS.format(host)
+        return PROXY_JS.format(host, id)
 
     @cherrypy.expose
     def ws(self):
         handler = cherrypy.request.ws_handler
 
+class RequestChannel(object):
+    def __init__(self, socket):
+        self.socket = socket
+        self.reply = None
+
 class ProxyWebSocket(WebSocket):
-    def opened(self):
-        global socket
-        socket = self
+    def handle_register(self, msg):
+        self.id = msg['id']
+        if self.id in channels:
+            self.close()
+            return
+        self.channel = RequestChannel(self)
+        channels[self.id] = self.channel
+
+    def handle_reply(self, msg):
+        self.channel.reply = msg["reply"]
+
     def closed(self, code, reason=None):
-        global socket
-        socket = None
+        try:
+            del channels[self.id]
+        except NameError:
+            pass
+
     def received_message(self, message):
-        global reply
-        reply = message.data
+        msg = json.loads(message.data)
+        if msg['type'] == 'register':
+            self.handle_register(msg)
+        elif msg['type'] == 'reply':
+            self.handle_reply(msg)
 
 class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def _write_reply(self, reply):
+        self.send_response(reply["status"])
+        for header in reply["headers"].splitlines():
+            name, value = map(lambda s: s.strip(), header.split(':', 1))
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(reply["data"])
     def _write_html(self, html):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html)
-    def do_GET(self):
-        global reply
-        assert reply == None
-        if socket == None:
-            self._write_html("No client connected")
-        socket.send(self.path, False)
-        while reply == None:
+
+    def getid(self):
+        if "Cookie" in self.headers:
+            c = Cookie.SimpleCookie(self.headers["Cookie"])
+            if 'id' in c:
+                return c['id'].value
+        return None
+
+    def setcookie(self, name, value):
+        c = Cookie.SimpleCookie()
+        c[name] = value
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.wfile.write(c.output()+'\n')
+        self.end_headers()
+        self.wfile.write("OK")
+
+    def do_req(self, method):
+        id = self.getid()
+        if id == None:
+            self._write_html("No cookie set, go to /_connect?id=ID")
+            return
+
+        if not id in channels:
+            self._write_html("id not found, go to /_connect?id=ID")
+            return
+
+        channel = channels[id]
+
+        content_len = int(self.headers.getheader('content-length', 0))
+        body = self.rfile.read(content_len)
+        headers = []
+        for name, value in self.headers.dict.iteritems():
+            headers.append({"name": name, "value": value})
+        req = {"method": method, "query": self.path, "data": body, "headers": headers}
+        channel.socket.send(json.dumps(req), False)
+
+        while channel.reply == None:
             sleep(0.1)
-        ret = reply
-        reply = None
-        self._write_html(ret)
+
+        ret = channel.reply
+        channel.reply = None
+        self._write_reply(ret)
+
+    def do_POST(self):
+        self.do_req("POST")
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path == '/_connect':
+            self.setcookie("id", parse_qs(url.query)["id"][0])
+            return
+
+        self.do_req("GET")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='HTTP proxy between two clients using websockets. To connect the target, visit http://domain:targetport/runproxy or include http://domain:targetport/proxy.js')
