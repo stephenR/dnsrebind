@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument('--proxyport', default='18083', type=int)
     args = parser.parse_args()
 
-    cherrypy.config.update({'server.socket_port': args.targetport})
+    cherrypy.config.update({'server.socket_host': '0.0.0.0', 'server.socket_port': args.targetport})
     WebSocketPlugin(cherrypy.engine).subscribe()
     cherrypy.tools.websocket = WebSocketTool()
     cherrypy.tree.mount(Root(), '/', config={'/ws': {'tools.websocket.on': True,
