@@ -34,7 +34,9 @@
     var xmlhttp = new XMLHttpRequest();
     xmlhttp.open("GET","//" + document.domain + ":18081/add?ip="+ip+"&domain="+document.domain,true);
     xmlhttp.send();
-    setTimeout(rebind_cb, 60000);
+    if (typeof rebind_cb == 'function') { 
+      setTimeout(rebind_cb, 60000);
+    }
   }
 
   var payload_url = getParameterByName('payload');
