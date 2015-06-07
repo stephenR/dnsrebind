@@ -10,11 +10,23 @@ from urllib import quote_plus
 import json
 from urlparse import urlparse, parse_qs
 import Cookie
+import base64
 
 channels = {}
 reply = None
 
 PROXY_JS = """\
+
+function _arrayBufferToBase64( buffer ) {{
+    var binary = '';
+    var bytes = new Uint8Array( buffer );
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {{
+        binary += String.fromCharCode( bytes[ i ] );
+    }}
+    return window.btoa( binary );
+}}
+
 var connection = new WebSocket('ws://{}/ws');
 
 connection.onopen = function () {{
@@ -34,13 +46,14 @@ connection.onmessage = function (e) {{
 
   console.log(query);
   var xhr = new XMLHttpRequest();
+  xhr.responseType = 'arraybuffer'
   xhr.onreadystatechange = function() {{
     if (xhr.readyState == 4) {{
-        var msg = {{"type": "reply", "request": e.data, "reply": {{ "status": xhr.status, "data": xhr.responseText, "headers": xhr.getAllResponseHeaders() }} }};
+        var msg = {{"type": "reply", "request": e.data, "reply": {{ "status": xhr.status, "data": _arrayBufferToBase64(xhr.response), "headers": xhr.getAllResponseHeaders() }} }};
         connection.send(JSON.stringify(msg));
     }}
   }}
-  xhr.open(method, query, false);
+  xhr.open(method, query, true);
   for (header in headers) {{
       xhr.setRequestHeader(header.name, header.value);
   }}
@@ -93,14 +106,19 @@ class ProxyWebSocket(WebSocket):
         elif msg['type'] == 'reply':
             self.handle_reply(msg)
 
+FORWARD_HEADERS = ['set-cookie']
+
 class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _write_reply(self, reply):
+        body = base64.b64decode(reply["data"])
         self.send_response(reply["status"])
         for header in reply["headers"].splitlines():
             name, value = map(lambda s: s.strip(), header.split(':', 1))
-            self.send_header(name, value)
+            if name.lower() in FORWARD_HEADERS:
+                self.send_header(name, value)
+        self.send_header('Content-Length', len(body))
         self.end_headers()
-        self.wfile.write(reply["data"].encode('utf-8'))
+        self.wfile.write(body)
     def _write_html(self, html):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
