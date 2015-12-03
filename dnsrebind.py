@@ -63,7 +63,7 @@ class RebindResolver(dnss.BaseResolver):
             reply.header.rcode = dnss.RCODE.NXDOMAIN
             return reply
 
-        if qtype == 'A' and qname.endswith('alternate.pwnrepeat.de.'):
+        if qtype == 'A' and qname.endswith('alternate.' + self.domain):
             reply.add_answer(*dnss.RR.fromZone("{} 0 {} {}".format(qname, qtype, self.alternateip)))
             if self.alternateip == '0.0.0.0':
                 self.alternateip = self.ip
@@ -71,8 +71,8 @@ class RebindResolver(dnss.BaseResolver):
                 self.alternateip = '0.0.0.0'
             return reply
 
-        if qtype == 'A' and qname.endswith('.cname.pwnrepeat.de.'):
-            cname = qname[:-(len('.cname.pwnrepeat.de.')-1)]
+        if qtype == 'A' and qname.endswith('.cname.' + self.domain):
+            cname = qname[:-(len('.cname.' + self.domain)-1)]
             reply.add_answer(*dnss.RR.fromZone("{} 0 {} {}".format(qname, 'CNAME', cname)))
             return reply
 
