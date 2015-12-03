@@ -30,6 +30,7 @@ class RebindResolver(dnss.BaseResolver):
     def __init__(self, ip, domain, ns1, ns2):
         self.domain = add_dot(domain)
         self.ip = ip
+        self.alternateip = self.ip
         self.soa_record = dnss.RR.fromZone(SOA_RECORD.format(self.domain))
         if ns1 != '' and ns2 != '':
             self.ns_record = dnss.RR.fromZone(NS_RECORD.format(self.domain, add_dot(ns1), add_dot(ns2)))
@@ -38,8 +39,9 @@ class RebindResolver(dnss.BaseResolver):
         self.reset()
 
     def reset(self):
-        self.db = {}
-        self.db[self.domain] = self.ip
+        self.db4 = {}
+        self.db6 = {}
+        self.db4[self.domain] = self.ip
 
     def resolve(self,request,handler):
         reply = request.reply()
@@ -56,12 +58,38 @@ class RebindResolver(dnss.BaseResolver):
             else:
                 reply.add_answer(*self.ns_record)
             return reply
+        
+        if not (qtype == 'A' or qtype == 'AAAA'):
+            reply.header.rcode = dnss.RCODE.NXDOMAIN
+            return reply
+
+        if qtype == 'A' and qname.endswith('alternate.pwnrepeat.de.'):
+            reply.add_answer(*dnss.RR.fromZone("{} 0 {} {}".format(qname, qtype, self.alternateip)))
+            if self.alternateip == '0.0.0.0':
+                self.alternateip = self.ip
+            else:
+                self.alternateip = '0.0.0.0'
+            return reply
+
+        if qtype == 'A' and qname.endswith('.cname.pwnrepeat.de.'):
+            cname = qname[:-(len('.cname.pwnrepeat.de.')-1)]
+            reply.add_answer(*dnss.RR.fromZone("{} 0 {} {}".format(qname, 'CNAME', cname)))
+            return reply
+
+        if qtype == 'A':
+            db = self.db4
+        else:
+            db = self.db6
+
+        if qtype == 'A' and self.db6.has_key(qname):
+            reply.header.rcode = dnss.RCODE.NXDOMAIN
+            return reply
 
         qname_substr = qname
         while True:
-            if self.db.has_key(qname_substr):
-                ip = self.db[qname_substr]
-                reply.add_answer(*dnss.RR.fromZone("{} 60 A {}".format(qname, ip)))
+            if db.has_key(qname_substr):
+                ip = db[qname_substr]
+                reply.add_answer(*dnss.RR.fromZone("{} 60 {} {}".format(qname, qtype, ip)))
                 return reply
             if not '.' in qname_substr:
                 break
@@ -75,11 +103,14 @@ class DNSApi(object):
     def __init__(self, resolver):
         self.resolver = resolver
 
-    def add(self, domain=None, ip=None):
+    def add(self, domain=None, ip=None, ipv="4"):
         if domain==None or ip==None:
             return "FAIL"
         domain = add_dot(domain)
-        resolver.db[domain] = ip
+        if ipv == "6":
+        	resolver.db6[domain] = ip
+        else:
+        	resolver.db4[domain] = ip
         return "OK"
     add.exposed = True
 
